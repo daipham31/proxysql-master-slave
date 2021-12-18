@@ -1,0 +1,112 @@
+version: '3'
+networks:
+  proxysql:
+    external: true
+    driver: overlay
+
+services:
+
+  proxysql:
+    image: proxysql/proxysql
+    ports:
+      - '16032:6032'
+      - '16033:6033'
+      - '16070:6070'
+    volumes:
+      - "./config/proxysql/proxysql.cnf:/etc/proxysql.cnf"
+    depends_on:
+      - master
+      - slave
+      - backup
+    networks:
+      - "proxysql"
+        
+  master:
+    image: mysql:8.0
+    command: --default-authentication-plugin=mysql_native_password
+    cap_add:
+      - SYS_NICE
+    environment:
+      MYSQL_ALLOW_EMPTY_PASSWORD: "false"
+      MYSQL_ROOT_PASSWORD: "root"
+      MYSQL_REPLICATION_MODE: "master"
+      MYSQL_REPLICATION_USER: "rep"
+      MYSQL_REPLICATION_PASSWORD: "root"
+      MYSQL_ROOT_PASSWORD: "root"
+    volumes:
+      - ./config/master/conf.d:/etc/mysql/conf.d
+      - ./data/master:/var/lib/mysql
+    networks:
+      - "proxysql"
+  
+  pmamaster:
+    image: phpmyadmin/phpmyadmin
+    ports:
+      - '8080:80'
+    environment:
+      PMA_HOST: master
+      UPLOAD_LIMIT: 300M
+    networks:
+      - "proxysql"
+  
+  slave:
+    image: mysql:8.0
+    command: --default-authentication-plugin=mysql_native_password
+    cap_add:
+      - SYS_NICE
+    depends_on:
+      - master
+    environment:
+      MYSQL_ALLOW_EMPTY_PASSWORD: "false"
+      MYSQL_ROOT_PASSWORD: "root"
+      MYSQL_REPLICATION_MODE: "slave"
+      MYSQL_REPLICATION_USER: "rep"
+      MYSQL_REPLICATION_PASSWORD: "root"
+      MYSQL_MASTER_ROOT_PASSWORD: "root"
+      MYSQL_MASTER_HOST: "master"
+      MYSQL_MASTER_PORT_NUMBER: "3306"
+    volumes:
+      - ./config/slave/conf.d:/etc/mysql/conf.d
+      - ./data/slave:/var/lib/mysql
+    networks:
+      - "proxysql"
+
+  pmaslave:
+    image: phpmyadmin/phpmyadmin
+    ports:
+      - '8081:80'
+    environment:
+      PMA_HOST: slave
+    networks:
+      - "proxysql"
+
+  backup:
+    image: mysql:8.0
+    command: --default-authentication-plugin=mysql_native_password
+    cap_add:
+      - SYS_NICE
+    depends_on:
+      - master
+    environment:
+      MYSQL_ALLOW_EMPTY_PASSWORD: "false"
+      MYSQL_ROOT_PASSWORD: "root"
+      MYSQL_REPLICATION_MODE: "slave"
+      MYSQL_REPLICATION_USER: "rep"
+      MYSQL_REPLICATION_PASSWORD: "root"
+      MYSQL_MASTER_ROOT_PASSWORD: "root"
+      MYSQL_MASTER_HOST: "master"
+      MYSQL_MASTER_PORT_NUMBER: "3306"
+    volumes:
+      - ./config/backup/conf.d:/etc/mysql/conf.d
+      - ./data/backup:/var/lib/mysql
+    networks:
+      - "proxysql"
+
+  pmabackup:
+    image: phpmyadmin/phpmyadmin
+    ports:
+      - '8082:80'
+    environment:
+      PMA_HOST: backup
+    networks:
+      - "proxysql"
